@@ -1,2 +1,5 @@
 # agent-memory-with-redis
-build a memory-enabled travel agent with Redis and LangGraph 
+
+Build a memory-enabled travel agent using **Redis** and **LangGraph**.
+
+🔗 Tutorial from: [https://github.com/NirDiamant/agents-towards-production](https://github.com/NirDiamant/agents-towards-production/blob/main/tutorials/agent-memory-with-redis/agent_memory_tutorial.ipynb)
