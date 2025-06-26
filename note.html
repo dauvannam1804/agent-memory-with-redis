@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Report: Agent Memory with Redis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Chosen Palette: Cool Slate and Cyan -->
+    <!-- Application Structure Plan: A single-page application with a top navigation bar for easy access to distinct, thematic sections: an 'Overview' to introduce the concept, an 'Interactive Architecture' diagram for exploration, an 'Implementation' section with tabbed code blocks for a deep dive, and a 'Live Demo' to simulate the agent's conversation and internal processes. This structure transforms the linear tutorial into a multi-faceted, explorable experience, allowing users to engage with the content in the order that best suits their interests, enhancing comprehension and engagement. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: System architecture (short/long-term memory). Goal: Organize & Inform. Viz: Interactive diagram using HTML/CSS divs and JS click events. Justification: More engaging than static images, promotes active exploration. Library: Vanilla JS, Tailwind.
+        - Report Info: LangGraph workflow. Goal: Explain Process. Viz: Simplified flowchart using styled HTML/CSS divs. Justification: Visually clarifies control flow. Library: HTML/CSS.
+        - Report Info: Code snippets (Models, Functions, Tools). Goal: Inform & Detail. Viz: Tabbed interface with styled code blocks. Interaction: Clickable tabs to switch content. Justification: Organizes extensive code into digestible chunks. Library: Vanilla JS.
+        - Report Info: Agent conversation. Goal: Demonstrate & Explain. Viz: Simulated chat window with an adjacent "Behind the Scenes" log. Interaction: "Start Demo" button. Justification: Makes the agent's internal logic visible and understandable. Library: Vanilla JS. 
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+            color: #1e293b; /* slate-800 */
+        }
+        .nav-link {
+            transition: color 0.3s ease;
+        }
+        .nav-link:hover, .nav-link.active {
+            color: #0891b2; /* cyan-600 */
+        }
+        .section-title {
+            color: #334155; /* slate-700 */
+        }
+        .section-subtitle {
+            color: #64748b; /* slate-500 */
+        }
+        .card {
+            background-color: white;
+            border: 1px solid #e2e8f0; /* slate-200 */
+            border-radius: 0.75rem;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+        .btn-primary {
+            background-color: #0e7490; /* cyan-700 */
+            color: white;
+            transition: background-color 0.3s ease;
+        }
+        .btn-primary:hover {
+            background-color: #0891b2; /* cyan-600 */
+        }
+        .code-block {
+            background-color: #f1f5f9; /* slate-100 */
+            border: 1px solid #e2e8f0; /* slate-200 */
+            border-radius: 0.5rem;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .tab.active {
+            border-bottom-color: #0891b2; /* cyan-600 */
+            color: #0e7490; /* cyan-700 */
+            font-weight: 600;
+        }
+        /* Architecture diagram styles */
+        .arch-box {
+            border: 2px solid #cbd5e1; /* slate-300 */
+            border-radius: 0.5rem;
+            padding: 1rem;
+            text-align: center;
+            background-color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .arch-box:hover, .arch-box.selected {
+            border-color: #0891b2; /* cyan-600 */
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            transform: scale(1.02);
+        }
+        .arch-connector {
+            position: absolute;
+            background-color: #94a3b8; /* slate-400 */
+            z-index: -1;
+        }
+        /* Chat simulation styles */
+        .chat-bubble {
+            max-width: 80%;
+            padding: 0.75rem 1rem;
+            border-radius: 1rem;
+        }
+        .user-bubble {
+            background-color: #0e7490; /* cyan-700 */
+            color: white;
+            border-bottom-right-radius: 0.25rem;
+            align-self: flex-end;
+        }
+        .agent-bubble {
+            background-color: #f1f5f9; /* slate-100 */
+            color: #334155; /* slate-700 */
+            border-bottom-left-radius: 0.25rem;
+            align-self: flex-start;
+        }
+        .log-item {
+            border-left: 3px solid #67e8f9; /* cyan-300 */
+            transition: opacity 0.5s ease;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- Header & Navigation -->
+    <header class="bg-white/80 backdrop-blur-lg sticky top-0 z-50 border-b border-slate-200">
+        <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <h1 class="text-xl font-bold text-slate-800">Agent Memory Report</h1>
+            <div class="hidden md:flex space-x-8">
+                <a href="#overview" class="nav-link">Overview</a>
+                <a href="#architecture" class="nav-link">Architecture</a>
+                <a href="#implementation" class="nav-link">Implementation</a>
+                <a href="#demo" class="nav-link">Live Demo</a>
+            </div>
+            <button id="mobile-menu-button" class="md:hidden">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7" />
+                </svg>
+            </button>
+        </nav>
+        <div id="mobile-menu" class="hidden md:hidden px-6 pb-4">
+            <a href="#overview" class="block py-2 nav-link">Overview</a>
+            <a href="#architecture" class="block py-2 nav-link">Architecture</a>
+            <a href="#implementation" class="block py-2 nav-link">Implementation</a>
+            <a href="#demo" class="block py-2 nav-link">Live Demo</a>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-6 py-12">
+
+        <!-- Section 1: Overview -->
+        <section id="overview" class="text-center mb-24">
+            <h2 class="text-4xl md:text-5xl font-bold section-title mb-4">Building a Memory-Enabled AI Agent</h2>
+            <p class="max-w-3xl mx-auto text-lg section-subtitle mb-12">An interactive exploration of giving AI agents memory using Redis and LangGraph. Without memory, AI agents are like goldfish, forgetting everything after each interaction. This report deconstructs how to build a stateful, personalized, and resilient Travel Agent.</p>
+            
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <div class="card p-6">
+                    <h3 class="font-bold text-lg mb-2">Short-Term Memory</h3>
+                    <p class="text-slate-600 text-sm">Manage conversation context using LangGraph's checkpointer with Redis.</p>
+                </div>
+                <div class="card p-6">
+                    <h3 class="font-bold text-lg mb-2">Long-Term Memory</h3>
+                    <p class="text-slate-600 text-sm">Store and retrieve persistent knowledge with RedisVL and vector search.</p>
+                </div>
+                <div class="card p-6">
+                    <h3 class="font-bold text-lg mb-2">ReAct Agent Tools</h3>
+                    <p class="text-slate-600 text-sm">Expose memory management as tools for the agent to decide when to use them.</p>
+                </div>
+                <div class="card p-6">
+                    <h3 class="font-bold text-lg mb-2">Context Summarization</h3>
+                    <p class="text-slate-600 text-sm">Prevent context window overflow by automatically summarizing long conversations.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2: Interactive Architecture -->
+        <section id="architecture" class="mb-24">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-bold section-title mb-4">Interactive System Architecture</h2>
+                <p class="max-w-2xl mx-auto section-subtitle">The agent uses a dual-memory system. Click on the components to learn more about how they work together.</p>
+            </div>
+
+            <div class="flex flex-col lg:flex-row gap-8 items-start">
+                <div class="w-full lg:w-2/3 relative h-[500px] lg:h-[400px]">
+                    <div id="arch-user" class="arch-box absolute top-1/2 -translate-y-1/2 left-4 w-32" data-target="user-details">User</div>
+                    <div id="arch-agent" class="arch-box absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 w-48" data-target="agent-details">Travel Agent (LangGraph)</div>
+                    <div id="arch-stm" class="arch-box absolute top-8 left-1/2 -translate-x-1/2 w-48" data-target="stm-details">Short-Term Memory (Checkpointer)</div>
+                    <div id="arch-ltm" class="arch-box absolute bottom-8 left-1/2 -translate-x-1/2 w-48" data-target="ltm-details">Long-Term Memory (RedisVL)</div>
+
+                    <!-- Connectors -->
+                    <div class="arch-connector" style="left: calc(128px + 1rem); top: 50%; width: calc(50% - 128px - 3rem); height: 2px;"></div>
+                    <div class="arch-connector" style="left: 50%; top: calc(32px + 4rem); height: calc(50% - 32px - 5rem); width: 2px;"></div>
+                    <div class="arch-connector" style="left: 50%; top: 50%; height: calc(50% - 32px - 5rem); width: 2px;"></div>
+                </div>
+                
+                <div class="w-full lg:w-1/3 card p-6" id="architecture-details">
+                    <div id="default-details">
+                        <h3 class="font-bold text-xl mb-3 text-cyan-700">Select a Component</h3>
+                        <p class="text-slate-600">Click on any component in the diagram to see its detailed description, purpose, and the technology it uses.</p>
+                    </div>
+                    <div id="user-details" class="hidden">
+                        <h3 class="font-bold text-xl mb-3 text-cyan-700">👤 User</h3>
+                        <p class="text-slate-600">The user initiates the interaction by sending a request or message to the agent. They are the source of information that will eventually become episodic long-term memory.</p>
+                    </div>
+                    <div id="agent-details" class="hidden">
+                        <h3 class="font-bold text-xl mb-3 text-cyan-700">🤖 Travel Agent</h3>
+                        <p class="text-slate-600 mb-2">The core of the system, built with LangGraph. It processes user requests, orchestrates tool use, and manages the conversation flow.</p>
+                        <ul class="list-disc list-inside text-sm text-slate-500">
+                            <li>Uses a ReAct (Reasoning and Acting) framework.</li>
+                            <li>Decides when to call memory tools.</li>
+                            <li>Generates responses for the user.</li>
+                        </ul>
+                    </div>
+                    <div id="stm-details" class="hidden">
+                        <h3 class="font-bold text-xl mb-3 text-cyan-700">⏱️ Short-Term Memory</h3>
+                        <p class="text-slate-600 mb-2">Manages the immediate context of the conversation. It ensures the agent remembers what was just said.</p>
+                        <ul class="list-disc list-inside text-sm text-slate-500">
+                            <li><strong>Technology:</strong> LangGraph's `RedisSaver` checkpointer.</li>
+                            <li><strong>Function:</strong> Saves the state of the graph (including message history) to Redis after each step.</li>
+                            <li><strong>Feature:</strong> Triggers summarization to keep the context window manageable.</li>
+                        </ul>
+                    </div>
+                    <div id="ltm-details" class="hidden">
+                        <h3 class="font-bold text-xl mb-3 text-cyan-700">🧠 Long-Term Memory</h3>
+                        <p class="text-slate-600 mb-2">Stores persistent knowledge and user preferences across conversations for a personalized experience.</p>
+                        <ul class="list-disc list-inside text-sm text-slate-500">
+                            <li><strong>Technology:</strong> Redis with the RedisVL client.</li>
+                            <li><strong>Function:</strong> Uses vector embeddings for semantic search.</li>
+                            <li><strong>Types:</strong>
+                                <ul class="list-['-_'] list-inside ml-4">
+                                    <li><strong>Episodic:</strong> User-specific facts ("User is allergic to shellfish").</li>
+                                    <li><strong>Semantic:</strong> General knowledge ("Singapore has great public transit").</li>
+                                </ul>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Implementation -->
+        <section id="implementation" class="mb-24">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-bold section-title mb-4">Implementation Deep Dive</h2>
+                <p class="max-w-2xl mx-auto section-subtitle">Explore the key code components that bring the agent to life. Switch between tabs to see the Pydantic models, Redis schema, core functions, and agent tools.</p>
+            </div>
+
+            <div>
+                <div class="border-b border-slate-200 mb-8">
+                    <nav class="-mb-px flex space-x-6" aria-label="Tabs">
+                        <button class="tab active whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="models">Data Models</button>
+                        <button class="tab whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="schema">Redis Schema</button>
+                        <button class="tab whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="functions">Core Functions</button>
+                        <button class="tab whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="tools">Agent Tools</button>
+                    </nav>
+                </div>
+
+                <div class="tab-content" id="models-content">
+                    <h3 class="font-semibold text-xl mb-4 text-slate-700">Pydantic Data Models</h3>
+                    <p class="text-slate-600 mb-6">These models provide type safety and clear data structures for creating, storing, and retrieving memories. They ensure a consistent memory lifecycle from LLM extraction to Redis storage.</p>
+                    <div class="code-block p-4 text-sm overflow-x-auto">
+<pre>
+<span class="text-purple-600">from</span> pydantic <span class="text-purple-600">import</span> BaseModel, Field
+<span class="text-purple-600">from</span> typing <span class="text-purple-600">import</span> List, Optional
+<span class="text-purple-600">from</span> enum <span class="text-purple-600">import</span> Enum
+<span class="text-purple-600">from</span> datetime <span class="text-purple-600">import</span> datetime
+<span class="text-purple-600">import</span> ulid
+
+<span class="text-purple-600">class</span> <span class="text-green-600">MemoryType</span>(str, Enum):
+    EPISODIC = <span class="text-yellow-600">"episodic"</span>
+    SEMANTIC = <span class="text-yellow-600">"semantic"</span>
+    CONVERSATION = <span class="text-yellow-600">"conversation"</span> <span class="text-gray-500"># For summarized conversation chunks</span>
+
+<span class="text-purple-600">class</span> <span class="text-green-600">Memory</span>(BaseModel):
+    content: str
+    memory_type: MemoryType
+    metadata: Optional[str] = <span class="text-yellow-600">""</span> <span class="text-gray-500"># e.g., "user_id:abc", "source:web"</span>
+
+<span class="text-purple-600">class</span> <span class="text-green-600">Memories</span>(BaseModel):
+    memories: List[Memory]
+
+<span class="text-purple-600">class</span> <span class="text-green-600">StoredMemory</span>(Memory):
+    id: str <span class="text-gray-500"># This will be the Redis key suffix</span>
+    memory_id: ulid.ULID = Field(default_factory=ulid.ULID)
+    created_at: datetime = Field(default_factory=datetime.now)
+    user_id: str <span class="text-gray-500"># Added for filtering/scoping memories to a user</span>
+</pre>
+                    </div>
+                </div>
+
+                <div class="tab-content hidden" id="schema-content">
+                    <h3 class="font-semibold text-xl mb-4 text-slate-700">Redis Search Index Schema</h3>
+                    <p class="text-slate-600 mb-6">This schema defines the structure for storing and querying long-term memories in Redis. It includes fields for content, memory type, metadata, and a vector field for semantic search.</p>
+                    <div class="code-block p-4 text-sm overflow-x-auto">
+<pre>
+<span class="text-purple-600">from</span> redisvl.schema <span class="text-purple-600">import</span> IndexSchema
+<span class="text-purple-600">from</span> redisvl.query <span class="text-purple-600">import</span> VectorRangeQuery, TagFilter
+
+memory_schema = IndexSchema.from_dict({
+    <span class="text-blue-600">"index"</span>: {
+        <span class="text-blue-600">"name"</span>: <span class="text-yellow-600">"idx:agent_memories"</span>,
+        <span class="text-blue-600">"prefix"</span>: <span class="text-yellow-600">"memory"</span>,
+        <span class="text-blue-600">"key_separator"</span>: <span class="text-yellow-600">":"</span>
+    },
+    <span class="text-blue-600">"fields"</span>: [
+        {<span class="text-blue-600">"name"</span>: <span class="text-yellow-600">"content"</span>, <span class="text-blue-600">"type"</span>: <span class="text-yellow-600">"text"</span>},
+        {<span class="text-blue-600">"name"</span>: <span class="text-yellow-600">"memory_type"</span>, <span class="text-blue-600">"type"</span>: <span class="text-yellow-600">"tag"</span>},
+        {<span class="text-blue-600">"name"</span>: <span class="text-yellow-600">"user_id"</span>, <span class="text-blue-600">"type"</span>: <span class="text-yellow-600">"tag"</span>},
+        {<span class="text-blue-600">"name"</span>: <span class="text-yellow-600">"created_at"</span>, <span class="text-blue-600">"type"</span>: <span class="text-yellow-600">"numeric"</span>}, <span class="text-gray-500"># For time-based filtering/sorting</span>
+        {
+            <span class="text-blue-600">"name"</span>: <span class="text-yellow-600">"embedding"</span>,
+            <span class="text-blue-600">"type"</span>: <span class="text-yellow-600">"vector"</span>,
+            <span class="text-blue-600">"attrs"</span>: {
+                <span class="text-blue-600">"algorithm"</span>: <span class="text-yellow-600">"flat"</span>,
+                <span class="text-blue-600">"dims"</span>: 1536, <span class="text-gray-500"># Assuming OpenAI embeddings</span>
+                <span class="text-blue-600">"distance_metric"</span>: <span class="text-yellow-600">"cosine"</span>,
+            },
+        },
+    ],
+})
+</pre>
+                    </div>
+                </div>
+
+                <div class="tab-content hidden" id="functions-content">
+                    <h3 class="font-semibold text-xl mb-4 text-slate-700">Core Memory Functions</h3>
+                    <p class="text-slate-600 mb-6">These functions handle the logic for storing memories with deduplication and retrieving them via semantic search. They form the backbone of the agent's memory tools.</p>
+                     <div class="code-block p-4 text-sm overflow-x-auto">
+<pre>
+<span class="text-purple-600">from</span> openai <span class="text-purple-600">import</span> OpenAI
+<span class="text-purple-600">from</span> redisvl.index <span class="text-purple-600">import</span> SearchIndex
+<span class="text-purple-600">from</span> .models <span class="text-purple-600">import</span> Memory, StoredMemory, MemoryType
+<span class="text-purple-600">from</span> .schema <span class="text-purple-600">import</span> memory_schema <span class="text-gray-500"># Assuming memory_schema is defined there</span>
+<span class="text-purple-600">from</span> datetime <span class="text-purple-600">import</span> datetime
+<span class="text-purple-600">import</span> ulid
+
+openai_client = OpenAI()
+long_term_memory_index = SearchIndex(schema=memory_schema) <span class="text-gray-500"># Initialize RedisVL index</span>
+
+<span class="text-purple-600">def</span> <span class="text-green-600">_generate_embedding</span>(text: str) -> List[float]:
+    <span class="text-yellow-600">"""Generates an embedding for the given text using OpenAI."""</span>
+    response = openai_client.embeddings.create(
+        input=text,
+        model=<span class="text-yellow-600">"text-embedding-ada-002"</span> <span class="text-gray-500"># Or your chosen embedding model</span>
+    )
+    return response.data[0].embedding
+
+<span class="text-purple-600">def</span> <span class="text-green-600">store_memory</span>(content: str, memory_type: MemoryType, user_id: str, metadata: str = <span class="text-yellow-600">""</span>) -> StoredMemory:
+    <span class="text-yellow-600">"""Stores a memory in the long-term memory system with deduplication."""</span>
+    <span class="text-gray-500"># 1. Generate embedding for the new memory</span>
+    new_embedding = _generate_embedding(content)
+
+    <span class="text-gray-500"># 2. Check for similar existing memories to avoid duplicates (simplified for example)</span>
+    <span class="text-gray-500"># In a real system, you'd perform a similarity search here and compare score thresholds.</span>
+    <span class="text-gray-500"># For now, let's assume no exact duplicate based on content + type for simplicity.</span>
+    existing_memories = retrieve_memories(content, [memory_type], user_id, top_k=1, min_score=0.95)
+    if existing_memories:
+        print(<span class="text-yellow-600">f"Skipping duplicate or highly similar memory: {content}"</span>)
+        return existing_memories[0] <span class="text-gray-500"># Return the existing one</span>
+
+    <span class="text-gray-500"># 3. Create a StoredMemory object</span>
+    new_memory = StoredMemory(
+        id=str(ulid.new()),
+        content=content,
+        memory_type=memory_type,
+        metadata=metadata,
+        user_id=user_id,
+        embedding=new_embedding <span class="text-gray-500"># This will be stored as a vector field</span>
+    )
+
+    <span class="text-gray-500"># 4. Store the memory data in RedisVL</span>
+    long_term_memory_index.load([new_memory.model_dump()])
+    return new_memory
+
+<span class="text-purple-600">def</span> <span class="text-green-600">retrieve_memories</span>(query: str, memory_types: List[MemoryType], user_id: str, top_k: int = 3, min_score: float = 0.7) -> List[StoredMemory]:
+    <span class="text-yellow-600">"""Retrieves long-term memories relevant to the query."""</span>
+    <span class="text-gray-500"># 1. Generate embedding for the query</span>
+    query_embedding = _generate_embedding(query)
+
+    <span class="text-gray-500"># 2. Create a vector range query with distance metric</span>
+    vector_query = VectorRangeQuery(
+        vector=query_embedding,
+        distance_threshold=1 - min_score, <span class="text-gray-500"># For cosine, higher score = lower distance</span>
+        num_results=top_k
+    )
+
+    <span class="text-gray-500"># 3. Build filter conditions based on memory type and user_id</span>
+    filters = []
+    if memory_types:
+        filters.append(TagFilter(<span class="text-yellow-600">"memory_type"</span>).any_of([mt.value for mt in memory_types]))
+    if user_id:
+        filters.append(TagFilter(<span class="text-yellow-600">"user_id"</span>).equals(user_id))
+    
+    for f in filters:
+        vector_query.set_filter(f)
+
+    <span class="text-gray-500"># 4. Execute the search and return parsed memory objects</span>
+    results = long_term_memory_index.query(vector_query)
+    
+    <span class="text-gray-500"># Convert RedisVL results to StoredMemory objects</span>
+    stored_memories = []
+    for doc in results:
+        try:
+            # RedisVL returns a Document object; access fields directly
+            stored_memories.append(StoredMemory(
+                id=doc.id,
+                content=doc.content,
+                memory_type=MemoryType(doc.memory_type),
+                metadata=doc.metadata,
+                user_id=doc.user_id,
+                created_at=datetime.fromtimestamp(float(doc.created_at))
+            ))
+        except Exception as e:
+            print(f<span class="text-yellow-600">"Error parsing RedisVL document: {e}"</span>)
+            continue
+    return stored_memories
+</pre>
+                    </div>
+                </div>
+                
+                <div class="tab-content hidden" id="tools-content">
+                    <h3 class="font-semibold text-xl mb-4 text-slate-700">Agent Memory Tools</h3>
+                    <p class="text-slate-600 mb-6">The core memory functions are wrapped in tools that the LLM can call. This allows the agent to decide autonomously when to save or recall information based on the conversation's context.</p>
+                     <div class="code-block p-4 text-sm overflow-x-auto">
+<pre>
+<span class="text-purple-600">from</span> langchain_core.tools <span class="text-purple-600">import</span> tool
+<span class="text-purple-600">from</span> typing <span class="text-purple-600">import</span> List
+<span class="text-purple-600">from</span> .memory_functions <span class="text-purple-600">import</span> store_memory, retrieve_memories
+<span class="text-purple-600">from</span> .models <span class="text-purple-600">import</span> MemoryType, StoredMemory
+
+<span class="text-cyan-600">@tool</span>
+<span class="text-purple-600">def</span> <span class="text-green-600">store_memory_tool</span>(content: str, memory_type: MemoryType, user_id: str, metadata: str = <span class="text-yellow-600">""</span>) -> str:
+    <span class="text-yellow-600">"""
+    Store a long-term memory in the system.
+    Use this tool to persist important facts, user preferences, or general knowledge.
+    'content': The text of the memory to store.
+    'memory_type': The type of memory ('episodic' for user-specific, 'semantic' for general knowledge, 'conversation' for summarized chat).
+    'user_id': The ID of the user associated with this memory.
+    'metadata': Optional JSON string for additional context (e.g., '{"source": "user_input"}').
+    """</span>
+    try:
+        stored_mem = store_memory(content, memory_type, user_id, metadata)
+        return f<span class="text-yellow-600">"Successfully stored {stored_mem.memory_type.value} memory (ID: {stored_mem.id}): '{stored_mem.content[:50]}...'"</span>
+    except Exception as e:
+        return f<span class="text-yellow-600">"Failed to store memory: {e}"</span>
+
+<span class="text-cyan-600">@tool</span>
+<span class="text-purple-600">def</span> <span class="text-green-600">retrieve_memories_tool</span>(query: str, memory_types: List[MemoryType], user_id: str, top_k: int = 3, min_score: float = 0.7) -> str:
+    <span class="text-yellow-600">"""
+    Retrieve long-term memories relevant to the query.
+    Use this tool to recall past interactions, user preferences, or general knowledge.
+    'query': The search query (e.g., a user's question, a topic).
+    'memory_types': A list of memory types to search ('episodic', 'semantic', 'conversation').
+    'user_id': The ID of the user whose memories to retrieve.
+    'top_k': The maximum number of relevant memories to retrieve (default is 3).
+    'min_score': Minimum similarity score (0.0-1.0) for retrieved memories (default is 0.7).
+    """</span>
+    try:
+        memories: List[StoredMemory] = retrieve_memories(query, memory_types, user_id, top_k, min_score)
+        if not memories:
+            return <span class="text-yellow-600">"No relevant memories found."</span>
+        
+        formatted_memories = <span class="text-yellow-600">"Retrieved memories:\n"</span>
+        for i, mem in enumerate(memories):
+            formatted_memories += f<span class="text-yellow-600">"- {i+1}. Type: {mem.memory_type.value}, Content: '{mem.content}', User: {mem.user_id}\n"</span>
+        return formatted_memories
+    except Exception as e:
+        return f<span class="text-yellow-600">"Failed to retrieve memories: {e}"</span>
+</pre>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- Section 4: Live Demo Simulation -->
+        <section id="demo" class="mb-24">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl md:text-4xl font-bold section-title mb-4">Live Demo Simulation</h2>
+                <p class="max-w-2xl mx-auto section-subtitle">Watch a simulated conversation with the Travel Agent. The "Behind the Scenes" log reveals the agent's internal actions, such as tool calls and summarization, in real-time.</p>
+            </div>
+
+            <div class="flex flex-col md:flex-row gap-8">
+                <!-- Chat Window -->
+                <div class="w-full md:w-1/2">
+                    <div class="card overflow-hidden">
+                        <div class="p-4 border-b border-slate-200 bg-white">
+                            <h3 class="font-semibold text-lg">Travel Assistant Chat</h3>
+                        </div>
+                        <div id="chat-window" class="p-6 h-96 overflow-y-auto flex flex-col space-y-4">
+                            <!-- Messages will be injected here -->
+                        </div>
+                        <div class="p-4 border-t border-slate-200 bg-slate-50">
+                            <button id="start-demo-btn" class="w-full btn-primary font-bold py-2 px-4 rounded-lg">
+                                Start Demo
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- Behind the Scenes Log -->
+                <div class="w-full md:w-1/2">
+                    <div class="card overflow-hidden">
+                         <div class="p-4 border-b border-slate-200 bg-white">
+                            <h3 class="font-semibold text-lg">Behind the Scenes</h3>
+                        </div>
+                        <div id="log-window" class="p-6 h-96 overflow-y-auto flex flex-col space-y-3">
+                           <p class="text-slate-500 text-center mt-4">Click "Start Demo" to see the agent's internal process.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Mobile Menu
+            const mobileMenuButton = document.getElementById('mobile-menu-button');
+            const mobileMenu = document.getElementById('mobile-menu');
+            mobileMenuButton.addEventListener('click', () => {
+                mobileMenu.classList.toggle('hidden');
+            });
+
+            // Architecture Diagram Interaction
+            const archBoxes = document.querySelectorAll('.arch-box');
+            const detailsContainer = document.getElementById('architecture-details');
+            const detailPanels = detailsContainer.querySelectorAll('div[id$="-details"]');
+
+            archBoxes.forEach(box => {
+                box.addEventListener('click', () => {
+                    archBoxes.forEach(b => b.classList.remove('selected'));
+                    box.classList.add('selected');
+                    
+                    const targetId = box.dataset.target;
+                    detailPanels.forEach(panel => {
+                        if (panel.id === targetId) {
+                            panel.classList.remove('hidden');
+                        } else {
+                            panel.classList.add('hidden');
+                        }
+                    });
+                });
+            });
+
+            // Implementation Tabs
+            const tabs = document.querySelectorAll('.tab');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+
+                    const targetId = tab.dataset.tab + '-content';
+                    tabContents.forEach(content => {
+                        if (content.id === targetId) {
+                            content.classList.remove('hidden');
+                        } else {
+                            content.classList.add('hidden');
+                        }
+                    });
+                });
+            });
+
+            // Demo Simulation
+            const startDemoBtn = document.getElementById('start-demo-btn');
+            const chatWindow = document.getElementById('chat-window');
+            const logWindow = document.getElementById('log-window');
+
+            const conversation = [
+                { type: 'user', text: "Hi! I plan to go to Singapore with my wife this summer. We love outdoors activities and trying new kinds of foods. Any recommendations?" },
+                { type: 'log', text: "TOOL CALL: store_memory_tool('User loves outdoors activities', 'episodic')" },
+                { type: 'log', text: "TOOL CALL: store_memory_tool('User loves trying new kinds of foods', 'episodic')" },
+                { type: 'agent', text: "That sounds like a wonderful trip! Singapore is a fantastic choice. For outdoors, I recommend Gardens by the Bay and Sentosa Island. For food, you must explore the hawker centers like Lau Pa Sat." },
+                { type: 'user', text: "Great, thanks! I'd love help booking flights. What are the best routes from Atlanta?" },
+                { type: 'agent', text: "I can help with recommendations, but I'm not able to book flights or provide real-time route information. For that, I'd recommend checking a flight comparison website." },
+                { type: 'user', text: "Okay, let's hold off on flights. Based on what you know about me, can you design the perfect Sunday for us in Singapore?" },
+                { type: 'log', text: "TOOL CALL: retrieve_memories_tool('user preferences for activities and food', ['episodic'])" },
+                { type: 'agent', text: "Of course! How about: Morning at the Botanic Gardens, lunch at a hawker center, afternoon at Gardens by the Bay, and dinner featuring Chili Crab at Lau Pa Sat, followed by the light show." },
+                { type: 'user', text: "Sounds good, but my wife is very allergic to shellfish." },
+                { type: 'log', text: "TOOL CALL: store_memory_tool('User's wife is allergic to shellfish', 'episodic')" },
+                { type: 'agent', text: "My sincerest apologies! Thank you for that critical information. Let's revise: For dinner, instead of Chili Crab, you can enjoy delicious satay skewers and other non-shellfish options at Lau Pa Sat. I've noted this allergy for all future recommendations." },
+                { type: 'log', text: "ACTION: Conversation has 6+ messages. Summarizing context..." },
+                { type: 'log', text: "SYSTEM: New summary added to short-term memory." }
+            ];
+
+            function appendMessage(type, text) {
+                const bubble = document.createElement('div');
+                bubble.className = `chat-bubble ${type === 'user' ? 'user-bubble' : 'agent-bubble'}`;
+                bubble.textContent = text;
+                chatWindow.appendChild(bubble);
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+            }
+
+            function appendLog(text) {
+                const logItem = document.createElement('div');
+                logItem.className = 'log-item p-2 text-sm text-slate-600 bg-slate-100 rounded-md opacity-0';
+                
+                let icon = '💡';
+                if (text.startsWith('TOOL CALL')) icon = '🔧';
+                if (text.startsWith('ACTION')) icon = '⚙️';
+                if (text.startsWith('SYSTEM')) icon = '💾';
+
+                logItem.innerHTML = `<span class="mr-2">${icon}</span> ${text}`;
+                logWindow.appendChild(logItem);
+                
+                setTimeout(() => { logItem.style.opacity = '1'; }, 100);
+                logWindow.scrollTop = logWindow.scrollHeight;
+            }
+
+            startDemoBtn.addEventListener('click', () => {
+                chatWindow.innerHTML = '';
+                logWindow.innerHTML = '';
+                startDemoBtn.disabled = true;
+                startDemoBtn.textContent = 'Simulation in progress...';
+
+                let delay = 1000;
+                conversation.forEach(item => {
+                    setTimeout(() => {
+                        if (item.type === 'user' || item.type === 'agent') {
+                            appendMessage(item.type, item.text);
+                        } else {
+                            appendLog(item.text);
+                        }
+                    }, delay);
+                    delay += (item.type === 'log') ? 1500 : 2500;
+                });
+
+                setTimeout(() => {
+                    startDemoBtn.disabled = false;
+                    startDemoBtn.textContent = 'Restart Demo';
+                }, delay);
+            });
+        });
+    </script>
+</body>
+</html>
